@@ -13,13 +13,14 @@
  */
 
 // Role codes are prototype placeholders — actual CORE roles TBD (ASSUMPTION-010).
+// Six confirmed prototype roles (Phase 4 decision).
 export const roles = [
   { code: "PROJECT_USER", name: "Project User", description: "Field/project staff who browse the catalog and submit requests.", isSystem: true },
   { code: "CPS_COORDINATOR", name: "CPS Coordinator", description: "Reviews requests, assigns assets, chooses fulfillment.", isSystem: true },
-  { code: "WAREHOUSE", name: "Warehouse / Logistics", description: "Handles delivery, transfer, return, and inspection.", isSystem: true },
+  { code: "CPS_WAREHOUSE", name: "CPS Warehouse / Logistics", description: "Handles delivery, transfer, return, and inspection.", isSystem: true },
   { code: "CPS_MANAGER", name: "CPS Manager", description: "Oversees CPS operations and approvals.", isSystem: true },
-  { code: "LEADERSHIP", name: "Leadership", description: "Read-mostly access to reporting and dashboards.", isSystem: true },
-  { code: "ADMIN", name: "System Administrator", description: "Manages reference data, users, and configuration.", isSystem: true },
+  { code: "READ_ONLY", name: "Read-Only Viewer", description: "Read-only access to reporting and dashboards.", isSystem: true },
+  { code: "SYSTEM_ADMIN", name: "System Admin", description: "Manages reference data, users, and configuration.", isSystem: true },
 ];
 
 // Permission set is a provisional starting point for discovery (see open-questions.md).
@@ -46,30 +47,31 @@ export const rolePermissions: Record<string, string[]> = {
     "CATALOG_READ", "REQUEST_READ_ALL", "REQUEST_REVIEW", "REQUEST_FULFILL",
     "ASSET_READ", "ASSET_MANAGE", "RATE_CARD_READ", "RENTAL_MANAGE", "REPORT_READ",
   ],
-  WAREHOUSE: ["REQUEST_READ_ALL", "ASSET_READ", "ASSET_MANAGE", "REPORT_READ"],
+  CPS_WAREHOUSE: ["REQUEST_READ_ALL", "ASSET_READ", "ASSET_MANAGE", "REPORT_READ"],
   CPS_MANAGER: [
     "CATALOG_READ", "REQUEST_READ_ALL", "REQUEST_REVIEW", "REQUEST_FULFILL",
     "ASSET_READ", "ASSET_MANAGE", "RATE_CARD_READ", "RATE_CARD_MANAGE",
     "RENTAL_MANAGE", "REPORT_READ",
   ],
-  LEADERSHIP: ["REQUEST_READ_ALL", "ASSET_READ", "RATE_CARD_READ", "REPORT_READ"],
-  ADMIN: [
+  READ_ONLY: ["REQUEST_READ_ALL", "ASSET_READ", "RATE_CARD_READ", "REPORT_READ"],
+  SYSTEM_ADMIN: [
     "CATALOG_READ", "REQUEST_READ_ALL", "REQUEST_REVIEW", "REQUEST_FULFILL",
     "ASSET_READ", "ASSET_MANAGE", "RATE_CARD_READ", "RATE_CARD_MANAGE",
     "RENTAL_MANAGE", "REPORT_READ", "ADMIN_MANAGE",
   ],
 };
 
-// Demo login accounts. Password for ALL demo users is "cps-demo-1234" (prototype only).
-// These are NOT real people. Do not use in any production context.
+// Demo login accounts (Phase 4 decision). Password for ALL demo users is
+// "demo1234" (prototype only). These are NOT real people.
+// `projectCodes: "ALL"` grants access to every seeded project.
 export const users = [
-  { email: "project.user@example.test", name: "Pat Fielding (Demo Project User)", roleCodes: ["PROJECT_USER"] },
-  { email: "coordinator@example.test", name: "Casey Rivera (Demo CPS Coordinator)", roleCodes: ["CPS_COORDINATOR"] },
-  { email: "warehouse@example.test", name: "Jordan Lee (Demo Warehouse)", roleCodes: ["WAREHOUSE"] },
-  { email: "manager@example.test", name: "Morgan Diaz (Demo CPS Manager)", roleCodes: ["CPS_MANAGER"] },
-  { email: "leadership@example.test", name: "Taylor Nguyen (Demo Leadership)", roleCodes: ["LEADERSHIP"] },
-  { email: "admin@example.test", name: "Alex Kim (Demo Admin)", roleCodes: ["ADMIN"] },
+  { email: "project.user@demo.cps", name: "Alex Rivera", roleCodes: ["PROJECT_USER"], projectCodes: ["DEMO-FL-001", "DEMO-IL-001"] },
+  { email: "coordinator@demo.cps", name: "Jordan Hayes", roleCodes: ["CPS_COORDINATOR"], projectCodes: "ALL" as const },
+  { email: "warehouse@demo.cps", name: "Sam Chen", roleCodes: ["CPS_WAREHOUSE"], projectCodes: "ALL" as const },
+  { email: "manager@demo.cps", name: "Morgan Davis", roleCodes: ["CPS_MANAGER"], projectCodes: "ALL" as const },
+  { email: "viewer@demo.cps", name: "Casey Kim", roleCodes: ["READ_ONLY"], projectCodes: "ALL" as const },
+  { email: "admin@demo.cps", name: "Taylor Brooks", roleCodes: ["SYSTEM_ADMIN"], projectCodes: "ALL" as const },
 ];
 
 // Shared demo password (prototype only — never a real credential).
-export const DEMO_PASSWORD = "cps-demo-1234";
+export const DEMO_PASSWORD = "demo1234";

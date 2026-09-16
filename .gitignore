@@ -48,3 +48,6 @@ Thumbs.db
 # Auto-generated document previews (markdown is the source of truth)
 docs/**/*.pdf
 docs/**/*.docx
+
+# Build artifacts
+**/tsconfig.tsbuildinfo

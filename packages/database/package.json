@@ -15,9 +15,11 @@
     "seed": "ts-node seed/index.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.18.0"
+    "@prisma/client": "^5.18.0",
+    "bcryptjs": "^2.4.3"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "prisma": "^5.18.0",
     "ts-node": "^10.9.0",
     "typescript": "^5.5.0"
