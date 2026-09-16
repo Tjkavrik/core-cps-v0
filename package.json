@@ -1,0 +1,19 @@
+{
+  "name": "core-cps-v0",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CORE Construction CPS (Construction Project Services) — V0.1 Prototype",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace apps/web",
+    "build": "npm run build --workspace apps/web",
+    "migrate": "npm run migrate --workspace packages/database",
+    "seed": "npm run seed --workspace packages/database"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,54 @@
+# docker-compose.dev.yml
+# Full local development stack: PostgreSQL + the Next.js web app.
+# Use this when you want everything running in containers.
+#
+#   docker-compose -f docker-compose.dev.yml up --build
+#
+# For DB-only local dev (running the app on your host with `make dev`),
+# use the base docker-compose.yml instead.
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: cps_postgres_dev
+    environment:
+      POSTGRES_DB: cps_dev
+      POSTGRES_USER: cps
+      POSTGRES_PASSWORD: cps_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cps -d cps_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: cps_web_dev
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # NOTE: inside the compose network the DB host is "postgres", not localhost.
+      DATABASE_URL: postgresql://cps:cps_dev_password@postgres:5432/cps_dev
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: dev_only_secret_change_me
+      NEXT_PUBLIC_APP_NAME: "CPS V0.1 (Prototype)"
+      NEXT_PUBLIC_APP_ENV: development
+      FILE_UPLOAD_MAX_MB: "25"
+      FILE_UPLOAD_DIR: /app/uploads
+      NODE_ENV: development
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads_dev:/app/uploads
+
+volumes:
+  postgres_data_dev:
+  uploads_dev:
