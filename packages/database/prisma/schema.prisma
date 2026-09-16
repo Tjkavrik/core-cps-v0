@@ -1,0 +1,757 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// IDENTITY & ACCESS
+// ============================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  passwordHash  String?   // prototype only — null for future OIDC users
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  roles             UserRole[]
+  projectAccess     ProjectUserAccess[]
+  requestsCreated   Request[]         @relation("RequestCreatedBy")
+  requestsAssigned  Request[]         @relation("RequestAssignedTo")
+  notes             Note[]
+  auditEvents       AuditEvent[]
+  documents         Document[]
+
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  code        String   @unique // PROJECT_USER, CPS_COORDINATOR, WAREHOUSE, CPS_MANAGER, LEADERSHIP, ADMIN
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model UserRole {
+  userId    String
+  roleId    String
+  grantedAt DateTime @default(now())
+  grantedBy String?
+
+  user User @relation(fields: [userId], references: [id])
+  role Role @relation(fields: [roleId], references: [id])
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model Permission {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  resource    String   // e.g. REQUEST, ASSET, RATE_CARD
+  action      String   // e.g. READ, CREATE, UPDATE, DELETE, APPROVE
+
+  roles RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role       Role       @relation(fields: [roleId], references: [id])
+  permission Permission @relation(fields: [permissionId], references: [id])
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+// ============================================================
+// PROJECTS
+// ============================================================
+
+model Project {
+  id          String   @id @default(cuid())
+  code        String   @unique  // e.g. PRJ-2024-001 — format TBD with CPS/IT
+  name        String
+  description String?
+  status      String   @default("ACTIVE") // ACTIVE, COMPLETED, ON_HOLD, CANCELLED
+  startDate   DateTime?
+  endDate     DateTime?
+  city        String?
+  state       String?
+  addressLine1 String?
+  addressLine2 String?
+  postalCode  String?
+  erpJobNumber String?  // future: populated from ERP; unknown which system
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userAccess     ProjectUserAccess[]
+  locations      ProjectLocation[]
+  phaseCodes     ProjectPhaseCode[]
+  requests       Request[]
+  assignments    AssetAssignment[]
+  externalRentals ExternalRental[]
+  deliveries     Delivery[]
+  assetsHere     Asset[]           @relation("AssetCurrentProject")
+
+  @@map("projects")
+}
+
+model ProjectUserAccess {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  grantedAt DateTime @default(now())
+  grantedBy String?
+  revokedAt DateTime?
+
+  project Project @relation(fields: [projectId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@unique([projectId, userId])
+  @@map("project_user_access")
+}
+
+model ProjectLocation {
+  id          String  @id @default(cuid())
+  projectId   String
+  name        String  // e.g. "Main Gate", "Trailer Row", "Crane Pad"
+  description String?
+  isDefault   Boolean @default(false)
+
+  project   Project    @relation(fields: [projectId], references: [id])
+  requests  Request[]
+  deliveries Delivery[]
+
+  @@map("project_locations")
+}
+
+model ProjectPhaseCode {
+  id          String  @id @default(cuid())
+  projectId   String
+  code        String
+  description String?
+  isActive    Boolean @default(true)
+
+  project  Project   @relation(fields: [projectId], references: [id])
+  requests Request[]
+
+  @@unique([projectId, code])
+  @@map("project_phase_codes")
+}
+
+// ============================================================
+// EQUIPMENT CATALOG
+// ============================================================
+
+model EquipmentCategory {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  description String?
+  parentId    String?
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
+
+  parent     EquipmentCategory?  @relation("CategoryChildren", fields: [parentId], references: [id])
+  children   EquipmentCategory[] @relation("CategoryChildren")
+  classes    EquipmentClass[]
+
+  @@map("equipment_categories")
+}
+
+model EquipmentClass {
+  id            String  @id @default(cuid())
+  categoryId    String
+  code          String  @unique  // e.g. GEN-25KW
+  name          String           // e.g. "25 kW Generator"
+  description   String?
+  specifications Json?           // flexible specs: weight, dimensions, capacity, etc.
+  isActive      Boolean @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  category         EquipmentCategory @relation(fields: [categoryId], references: [id])
+  assets           Asset[]
+  rateCardLines    RateCardLine[]
+  requestLineItems RequestLineItem[]
+  relatedClasses   EquipmentClassRelation[] @relation("SourceClass")
+  relatedTo        EquipmentClassRelation[] @relation("TargetClass")
+  savedListItems   SavedListItem[]
+
+  @@map("equipment_classes")
+}
+
+// Accessories / commonly used together
+model EquipmentClassRelation {
+  sourceClassId  String
+  targetClassId  String
+  relationType   String // ACCESSORY, COMMONLY_USED_WITH, REQUIRES
+
+  sourceClass EquipmentClass @relation("SourceClass", fields: [sourceClassId], references: [id])
+  targetClass EquipmentClass @relation("TargetClass", fields: [targetClassId], references: [id])
+
+  @@id([sourceClassId, targetClassId, relationType])
+  @@map("equipment_class_relations")
+}
+
+// ============================================================
+// INDIVIDUAL ASSETS
+// ============================================================
+
+model Asset {
+  id              String   @id @default(cuid())
+  assetNumber     String   @unique  // e.g. CPS-GEN-0047 — format TBD with CPS
+  classId         String
+  serialNumber    String?
+  make            String?
+  model           String?
+  year            Int?
+  status          String   @default("AVAILABLE")
+  // AVAILABLE, ASSIGNED, IN_TRANSFER, MAINTENANCE, OUT_OF_SERVICE, RETIRED
+  currentLocationId String?
+  currentProjectId  String?
+  acquisitionDate   DateTime?
+  disposalDate      DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  class           EquipmentClass @relation(fields: [classId], references: [id])
+  currentLocation Location?      @relation("AssetCurrentLocation", fields: [currentLocationId], references: [id])
+  currentProject  Project?       @relation("AssetCurrentProject", fields: [currentProjectId], references: [id])
+
+  statusHistory   AssetStatusHistory[]
+  assignments     AssetAssignment[]
+  transfers       AssetTransfer[]
+  deliveries      Delivery[]
+  returns         Return[]
+  inspections     Inspection[]
+  meterReadings   MeterReading[]
+  damageRecords   DamageRecord[]
+  maintenanceRecords MaintenanceRecord[]
+  auditEvents     AuditEvent[]
+  documents       Document[]
+
+  @@map("assets")
+}
+
+model AssetStatusHistory {
+  id         String   @id @default(cuid())
+  assetId    String
+  status     String
+  reason     String?
+  changedBy  String?
+  changedAt  DateTime @default(now())
+  locationId String?
+  projectId  String?
+  notes      String?
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@map("asset_status_history")
+}
+
+// ============================================================
+// LOCATIONS
+// ============================================================
+
+model Location {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  type        String  // WAREHOUSE, YARD, PROJECT, EXTERNAL
+  addressLine1 String?
+  addressLine2 String?
+  city        String?
+  state       String?
+  postalCode  String?
+  isActive    Boolean @default(true)
+
+  assetsHere     Asset[]    @relation("AssetCurrentLocation")
+  transfersFrom  AssetTransfer[] @relation("TransferFrom")
+  transfersTo    AssetTransfer[] @relation("TransferTo")
+  deliveriesFrom Delivery[] @relation("DeliveryFrom")
+
+  @@map("locations")
+}
+
+// ============================================================
+// VENDORS
+// ============================================================
+
+model Vendor {
+  id          String  @id @default(cuid())
+  code        String  @unique
+  name        String
+  contactName String?
+  phone       String?
+  email       String?
+  website     String?
+  notes       String?
+  isActive    Boolean @default(true)
+  createdAt   DateTime @default(now())
+
+  externalRentals ExternalRental[]
+
+  @@map("vendors")
+}
+
+// ============================================================
+// RATE CARDS
+// ============================================================
+
+model RateCard {
+  id            String   @id @default(cuid())
+  name          String
+  description   String?
+  effectiveDate DateTime
+  expirationDate DateTime?
+  isActive      Boolean  @default(true)
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  // NOTE: Rates are SAMPLE/FICTIONAL placeholder data for prototype only.
+  // Actual CPS rate methodology has not been established.
+
+  lines RateCardLine[]
+
+  @@map("rate_cards")
+}
+
+model RateCardLine {
+  id                 String   @id @default(cuid())
+  rateCardId         String
+  classId            String
+  dailyRate          Decimal? @db.Decimal(10, 2)
+  weeklyRate         Decimal? @db.Decimal(10, 2)
+  monthlyRate        Decimal? @db.Decimal(10, 2) // 28-day — period TBD with CPS
+  includedHours      Int?     // hours included per period before overtime — TBD
+  overtimeHourRate   Decimal? @db.Decimal(10, 2)
+  deliveryCharge     Decimal? @db.Decimal(10, 2)
+  pickupCharge       Decimal? @db.Decimal(10, 2)
+  notes              String?
+  // ASSUMPTION: daily/weekly/28-day structure inspired by Blue Hat research.
+  // Actual CPS periods and methodology are unknown.
+
+  rateCard RateCard       @relation(fields: [rateCardId], references: [id])
+  class    EquipmentClass @relation(fields: [classId], references: [id])
+
+  @@unique([rateCardId, classId])
+  @@map("rate_card_lines")
+}
+
+// ============================================================
+// REQUESTS
+// ============================================================
+
+model Request {
+  id              String   @id @default(cuid())
+  requestNumber   String   @unique @default(cuid()) // formatted on create
+  projectId       String
+  phaseCodeId     String?
+  requestedBy     String
+  assignedTo      String?  // CPS coordinator
+  status          String   @default("DRAFT")
+  // DRAFT, SUBMITTED, UNDER_REVIEW, APPROVED, FULFILLING, PARTIALLY_FULFILLED
+  // FULFILLED, CANCELLED, ON_HOLD
+  deliveryLocationId String?
+  neededDate      DateTime?
+  expectedReturnDate DateTime?
+  notes           String?
+  isFreeForm      Boolean  @default(false) // true = free-form text request
+  freeFormText    String?  // used when isFreeForm = true
+  submittedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project         Project          @relation(fields: [projectId], references: [id])
+  phaseCode       ProjectPhaseCode? @relation(fields: [phaseCodeId], references: [id])
+  createdByUser   User             @relation("RequestCreatedBy", fields: [requestedBy], references: [id])
+  assignedToUser  User?            @relation("RequestAssignedTo", fields: [assignedTo], references: [id])
+  deliveryLocation ProjectLocation? @relation(fields: [deliveryLocationId], references: [id])
+
+  lineItems       RequestLineItem[]
+  assignments     AssetAssignment[]
+  externalRentals ExternalRental[]
+  deliveries      Delivery[]
+  returns         Return[]
+  statusHistory   RequestStatusHistory[]
+  notes_rel       Note[]            @relation("RequestNotes")
+  documents       Document[]
+  auditEvents     AuditEvent[]
+
+  @@map("requests")
+}
+
+model RequestLineItem {
+  id          String   @id @default(cuid())
+  requestId   String
+  classId     String?  // null for free-form lines
+  description String   // class name or free-form description
+  quantity    Int      @default(1)
+  unitNotes   String?  // size, configuration notes
+  fulfillmentType String? // CPS_OWNED, CPS_TRANSFER, EXTERNAL, OTHER_DIRECT
+  status      String   @default("PENDING")
+
+  request Request         @relation(fields: [requestId], references: [id])
+  class   EquipmentClass? @relation(fields: [classId], references: [id])
+
+  @@map("request_line_items")
+}
+
+model RequestStatusHistory {
+  id        String   @id @default(cuid())
+  requestId String
+  status    String
+  changedBy String?
+  changedAt DateTime @default(now())
+  notes     String?
+
+  request Request @relation(fields: [requestId], references: [id])
+
+  @@map("request_status_history")
+}
+
+// ============================================================
+// FULFILLMENT
+// ============================================================
+
+// NOTE: Four fulfillment types are supported conceptually.
+// CPS organizational responsibility for each type has not been confirmed.
+// Types: CPS_OWNED, CPS_TRANSFER, EXTERNAL, OTHER_DIRECT
+
+model AssetAssignment {
+  id              String   @id @default(cuid())
+  assetId         String
+  requestId       String?
+  projectId       String
+  lineItemId      String?
+  assignedBy      String?
+  assignedAt      DateTime @default(now())
+  startDate       DateTime?
+  expectedEndDate DateTime?
+  actualEndDate   DateTime?
+  status          String   @default("ACTIVE")
+  // ACTIVE, RETURNED, TRANSFERRED, CANCELLED
+  notes           String?
+
+  asset    Asset    @relation(fields: [assetId], references: [id])
+  request  Request? @relation(fields: [requestId], references: [id])
+  project  Project  @relation(fields: [projectId], references: [id])
+
+  @@map("asset_assignments")
+}
+
+model AssetTransfer {
+  id            String   @id @default(cuid())
+  assetId       String
+  fromLocationId String?
+  toLocationId  String?
+  fromProjectId String?
+  toProjectId   String?
+  initiatedBy   String?
+  initiatedAt   DateTime @default(now())
+  scheduledDate DateTime?
+  completedAt   DateTime?
+  status        String   @default("PENDING")
+  // PENDING, IN_TRANSIT, COMPLETED, CANCELLED
+  notes         String?
+
+  asset        Asset     @relation(fields: [assetId], references: [id])
+  fromLocation Location? @relation("TransferFrom", fields: [fromLocationId], references: [id])
+  toLocation   Location? @relation("TransferTo", fields: [toLocationId], references: [id])
+
+  @@map("asset_transfers")
+}
+
+model Delivery {
+  id              String   @id @default(cuid())
+  assetId         String?
+  requestId       String?
+  projectId       String
+  fromLocationId  String?
+  deliveryLocationId String?
+  scheduledDate   DateTime?
+  actualDate      DateTime?
+  deliveredBy     String?
+  receivedBy      String?
+  status          String   @default("SCHEDULED")
+  // SCHEDULED, IN_TRANSIT, DELIVERED, FAILED
+  notes           String?
+  documents       Document[]
+
+  asset    Asset?           @relation(fields: [assetId], references: [id])
+  request  Request?         @relation(fields: [requestId], references: [id])
+  project  Project          @relation(fields: [projectId], references: [id])
+  fromLocation Location?    @relation("DeliveryFrom", fields: [fromLocationId], references: [id])
+  deliveryLocation ProjectLocation? @relation(fields: [deliveryLocationId], references: [id])
+
+  @@map("deliveries")
+}
+
+model Return {
+  id              String   @id @default(cuid())
+  assetId         String
+  requestId       String?
+  requestedBy     String?
+  requestedAt     DateTime @default(now())
+  scheduledDate   DateTime?
+  actualDate      DateTime?
+  pickedUpBy      String?
+  status          String   @default("REQUESTED")
+  // REQUESTED, SCHEDULED, IN_TRANSIT, RECEIVED, INSPECTING, COMPLETE, CANCELLED
+  meterReading    Float?
+  notes           String?
+
+  asset    Asset    @relation(fields: [assetId], references: [id])
+  request  Request? @relation(fields: [requestId], references: [id])
+  inspection Inspection?
+
+  @@map("returns")
+}
+
+model Inspection {
+  id          String   @id @default(cuid())
+  assetId     String
+  returnId    String?  @unique
+  type        String   // RETURN, PERIODIC, PRE_DELIVERY, POST_MAINTENANCE
+  inspectedBy String?
+  inspectedAt DateTime @default(now())
+  condition   String?  // GOOD, FAIR, DAMAGED, NEEDS_SERVICE
+  meterReading Float?
+  notes       String?
+  passed      Boolean?
+
+  asset    Asset   @relation(fields: [assetId], references: [id])
+  return   Return? @relation(fields: [returnId], references: [id])
+  damageRecords DamageRecord[]
+  documents     Document[]
+
+  @@map("inspections")
+}
+
+model MeterReading {
+  id        String   @id @default(cuid())
+  assetId   String
+  reading   Float
+  unit      String   @default("HOURS") // HOURS, MILES, KM
+  readingDate DateTime @default(now())
+  recordedBy String?
+  source    String?  // MANUAL, TELEMATICS, INSPECTION
+
+  asset Asset @relation(fields: [assetId], references: [id])
+
+  @@map("meter_readings")
+}
+
+model DamageRecord {
+  id           String   @id @default(cuid())
+  assetId      String
+  inspectionId String?
+  description  String
+  severity     String?  // MINOR, MODERATE, MAJOR
+  projectId    String?
+  discoveredBy String?
+  discoveredAt DateTime @default(now())
+  repairStatus String?  // PENDING, IN_REPAIR, REPAIRED, WRITTEN_OFF
+  notes        String?
+
+  asset      Asset       @relation(fields: [assetId], references: [id])
+  inspection Inspection? @relation(fields: [inspectionId], references: [id])
+  documents  Document[]
+
+  @@map("damage_records")
+}
+
+model MaintenanceRecord {
+  id          String   @id @default(cuid())
+  assetId     String
+  type        String   // PREVENTIVE, CORRECTIVE, INSPECTION, REPAIR
+  description String
+  status      String   @default("OPEN") // OPEN, IN_PROGRESS, COMPLETE, DEFERRED
+  priority    String?  // LOW, NORMAL, HIGH, URGENT
+  scheduledDate DateTime?
+  completedAt DateTime?
+  technician  String?
+  laborHours  Float?
+  partsCost   Decimal? @db.Decimal(10, 2)
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  asset     Asset      @relation(fields: [assetId], references: [id])
+  documents Document[]
+
+  @@map("maintenance_records")
+}
+
+// ============================================================
+// EXTERNAL RENTALS
+// ============================================================
+
+// NOTE: CPS organizational authority for external rentals is not confirmed.
+// This table is included to support demand tracking and discovery.
+// See open-questions.md for unresolved external rental questions.
+
+model ExternalRental {
+  id              String   @id @default(cuid())
+  requestId       String?
+  projectId       String
+  vendorId        String?
+  description     String
+  reasonCode      String?  // why external? CPS_NO_STOCK, ALL_DEPLOYED, MAINTENANCE, etc.
+  // NOTE: reason codes are provisional — to be validated with CPS
+  startDate       DateTime?
+  expectedEndDate DateTime?
+  actualEndDate   DateTime?
+  dailyRate       Decimal? @db.Decimal(10, 2)
+  estimatedCost   Decimal? @db.Decimal(10, 2)
+  actualCost      Decimal? @db.Decimal(10, 2)
+  poNumber        String?
+  deliveryDate    DateTime?
+  pickupDate      DateTime?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  request  Request? @relation(fields: [requestId], references: [id])
+  project  Project  @relation(fields: [projectId], references: [id])
+  vendor   Vendor?  @relation(fields: [vendorId], references: [id])
+  documents Document[]
+
+  @@map("external_rentals")
+}
+
+// ============================================================
+// SAVED LISTS
+// ============================================================
+
+model SavedList {
+  id          String  @id @default(cuid())
+  name        String  // e.g. "Project Startup", "Dry-Out Equipment"
+  description String?
+  createdBy   String?
+  isShared    Boolean @default(false)
+  createdAt   DateTime @default(now())
+
+  items SavedListItem[]
+
+  @@map("saved_lists")
+}
+
+model SavedListItem {
+  id        String  @id @default(cuid())
+  listId    String
+  classId   String
+  quantity  Int     @default(1)
+  notes     String?
+  sortOrder Int     @default(0)
+
+  list  SavedList      @relation(fields: [listId], references: [id])
+  class EquipmentClass @relation(fields: [classId], references: [id])
+
+  @@map("saved_list_items")
+}
+
+// ============================================================
+// DOCUMENTS
+// ============================================================
+
+model Document {
+  id           String   @id @default(cuid())
+  filename     String
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  storagePath  String   // relative path — actual location depends on StorageProvider
+  uploadedBy   String?
+  uploadedAt   DateTime @default(now())
+  entityType   String   // REQUEST, ASSET, DELIVERY, INSPECTION, MAINTENANCE, DAMAGE, RENTAL
+  description  String?
+
+  uploadedByUser  User?           @relation(fields: [uploadedBy], references: [id])
+  request         Request?        @relation(fields: [requestId], references: [id])
+  requestId       String?
+  asset           Asset?          @relation(fields: [assetId], references: [id])
+  assetId         String?
+  inspection      Inspection?     @relation(fields: [inspectionId], references: [id])
+  inspectionId    String?
+  delivery        Delivery?       @relation(fields: [deliveryId], references: [id])
+  deliveryId      String?
+  externalRental  ExternalRental? @relation(fields: [externalRentalId], references: [id])
+  externalRentalId String?
+  damageRecord    DamageRecord?   @relation(fields: [damageRecordId], references: [id])
+  damageRecordId  String?
+  maintenance     MaintenanceRecord? @relation(fields: [maintenanceId], references: [id])
+  maintenanceId   String?
+
+  @@map("documents")
+}
+
+// ============================================================
+// NOTES / COMMENTS
+// ============================================================
+
+model Note {
+  id         String   @id @default(cuid())
+  content    String
+  isInternal Boolean  @default(false) // internal CPS notes not visible to project users
+  authorId   String?
+  createdAt  DateTime @default(now())
+  requestId  String?
+
+  author  User?    @relation(fields: [authorId], references: [id])
+  request Request? @relation("RequestNotes", fields: [requestId], references: [id])
+
+  @@map("notes")
+}
+
+// ============================================================
+// AUDIT TRAIL
+// ============================================================
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String   // e.g. REQUEST_SUBMITTED, ASSET_ASSIGNED, STATUS_CHANGED
+  entityType String   // REQUEST, ASSET, ASSIGNMENT, TRANSFER, RETURN, etc.
+  entityId   String
+  projectId  String?
+  assetId    String?
+  requestId  String?
+  priorValue Json?    // snapshot of prior state where practical
+  newValue   Json?    // snapshot of new state
+  metadata   Json?    // additional context
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user  User?  @relation(fields: [userId], references: [id])
+  asset Asset? @relation(fields: [assetId], references: [id])
+  request Request? @relation(fields: [requestId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([userId])
+  @@index([assetId])
+  @@index([requestId])
+  @@index([createdAt])
+  @@map("audit_events")
+}
