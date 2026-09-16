@@ -3,12 +3,23 @@
 @tailwind utilities;
 
 :root {
-  --background: #f5f6f8;
-  --foreground: #1a1a1a;
+  --cps-navy: #1b2a4a;
+  --cps-blue: #2563eb;
+  --cps-orange: #ea580c;
+  --cps-slate: #475569;
+  --cps-gray-100: #f1f5f9;
+  --cps-gray-200: #e2e8f0;
+  --cps-white: #ffffff;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  background: var(--cps-gray-100);
+  color: #0f172a;
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle scrollbar for operations tables */
+* {
+  scrollbar-width: thin;
 }

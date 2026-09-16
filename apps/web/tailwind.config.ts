@@ -5,11 +5,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Neutral "operations software" palette — NOT Blue Hat branding.
+        // CORE CPS construction-operations palette (see task design system).
         cps: {
-          DEFAULT: "#1f3a5f",
-          accent: "#c8552b",
+          navy: "#1B2A4A",
+          blue: "#2563EB",
+          orange: "#EA580C",
+          slate: "#475569",
+          gray100: "#F1F5F9",
+          gray200: "#E2E8F0",
+          white: "#FFFFFF",
         },
+      },
+      fontFamily: {
+        sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "Roboto", "sans-serif"],
       },
     },
   },

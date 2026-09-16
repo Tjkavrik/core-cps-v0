@@ -1,0 +1,17 @@
+import { clsx } from "clsx";
+
+export function Card({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <div className={clsx("rounded-lg border border-cps-gray200 bg-white shadow-sm", className)}>{children}</div>
+  );
+}
+
+export function CardHeader({ className, children }: { className?: string; children: React.ReactNode }) {
+  return <div className={clsx("border-b border-cps-gray200 px-5 py-3", className)}>{children}</div>;
+}
+
+export function CardBody({ className, children }: { className?: string; children: React.ReactNode }) {
+  return <div className={clsx("px-5 py-4", className)}>{children}</div>;
+}
+
+export default Card;
